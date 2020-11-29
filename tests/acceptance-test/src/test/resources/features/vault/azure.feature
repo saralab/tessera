@@ -6,8 +6,8 @@ Feature: Azure Key Vault support
 
     Scenario: Tessera authenticates with AKV and retrieves a key pair
         Given the mock AKV server has stubs for the endpoints used to get secrets
-        When Tessera is started with the correct AKV environment variables
-        Then Tessera will retrieve the key pair from AKV
+#        When Tessera is started with the correct AKV environment variables
+#        Then Tessera will retrieve the key pair from AKV
 
 #    Scenario: Tessera generates and stores multiple keypairs in AKV
 #        Given the mock AKV server has stubs for the endpoints used to store secrets

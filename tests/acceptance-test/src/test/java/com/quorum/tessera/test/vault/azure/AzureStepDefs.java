@@ -2,7 +2,6 @@ package com.quorum.tessera.test.vault.azure;
 
 import com.quorum.tessera.config.Config;
 import com.quorum.tessera.config.util.JaxbUtil;
-import com.quorum.tessera.ssl.context.SSLContextBuilder;
 import com.quorum.tessera.test.util.ElUtil;
 import com.sun.net.httpserver.HttpServer;
 import com.sun.net.httpserver.HttpsConfigurator;
@@ -18,13 +17,12 @@ import org.slf4j.LoggerFactory;
 import javax.json.Json;
 import javax.json.JsonObject;
 import javax.json.JsonReader;
+import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLParameters;
+import javax.net.ssl.TrustManagerFactory;
 import javax.ws.rs.core.UriBuilder;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.UncheckedIOException;
+import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.InetSocketAddress;
 import java.net.URI;
@@ -35,6 +33,7 @@ import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.KeyStore;
 import java.util.*;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -77,39 +76,49 @@ public class AzureStepDefs implements En {
     private final String nodeBPubUrl = String.format(urlFormat, "nodeBPub", "");
     private final String nodeBKeyUrl = String.format(urlFormat, "nodeBKey", "");
 
-    SSLContext sslContext() throws Exception {
-        final URL keystore = getClass().getResource("/certificates/server-localhost-with-san.jks");
+    SSLContext serverSSLContext() throws Exception {
+        final Path keyStoreFile = Paths.get(getClass().getResource("/certificates/server-localhost-with-san.jks").toURI());
+        final char[] jksPassword = "testtest".toCharArray();
 
-        final Path truststore = Paths.get(getClass().getResource("/certificates/truststore.jks").toURI());
+        final SSLContext sslContext = SSLContext.getInstance("TLS");
 
-        /*
-        “sslConfig”: {                              // Config required if InfluxDB server is using TLS
-                “tls”: “STRICT”,
-                “sslConfigType”: “CLIENT_ONLY”,
-                “clientTrustMode”: “CA”,
-                “clientTrustStore”: “/path/to/truststore.jks”,
-                “clientTrustStorePassword”: “password”,
-                “clientKeyStore”: “path/to/truststore.jks”,
-                “clientKeyStorePassword”: “password”
-            }
-         */
+        final KeyStore keyStore = KeyStore.getInstance("JKS");
 
+        try (InputStream in = Files.newInputStream(keyStoreFile)) {
+            keyStore.load(in, jksPassword);
+        }
 
+        final KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
 
-        return SSLContextBuilder.createBuilder(
-            "localhost",
-            Paths.get(keystore.toURI()),
-            "testtest".toCharArray(),
-            truststore,
-            "testtest".toCharArray())
-            .forAllCertificates()
-            .build();
+        keyManagerFactory.init(keyStore, jksPassword);
 
+        sslContext.init(keyManagerFactory.getKeyManagers(), null, null);
 
+        return sslContext;
+    }
+
+    SSLContext clientSSLContext() throws Exception {
+        final Path trustStoreFile = Paths.get(getClass().getResource("/certificates/truststore.jks").toURI());
+        final char[] jksPassword = "testtest".toCharArray();
+
+        final SSLContext sslContext = SSLContext.getInstance("TLS");
+
+        final KeyStore trustStore = KeyStore.getInstance("JKS");
+
+        try (InputStream in = Files.newInputStream(trustStoreFile)) {
+            trustStore.load(in, jksPassword);
+        }
+
+        final TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+
+        trustManagerFactory.init(trustStore);
+
+        sslContext.init(null, trustManagerFactory.getTrustManagers(), null);
+
+        return sslContext;
     }
 
     public AzureStepDefs() throws Exception {
-        final SSLContext sslContext = sslContext();
         After(
             () -> {
 
@@ -128,9 +137,22 @@ public class AzureStepDefs implements En {
                 final InetSocketAddress inetAddress = new InetSocketAddress(azureKeyVaultPort);
                 final HttpsServer httpServer = HttpsServer.create(inetAddress, 0);
 
-                final HttpsConfigurator httpsConfigurator = new HttpsConfigurator(sslContext);
+                final SSLContext serverSSLContext = serverSSLContext();
+
+                final HttpsConfigurator httpsConfigurator = new HttpsConfigurator(serverSSLContext);
                 httpServer.setHttpsConfigurator(httpsConfigurator);
 
+                httpServer.setHttpsConfigurator (new HttpsConfigurator(serverSSLContext) {
+                    public void configure (HttpsParameters params) {
+                        SSLContext c = getSSLContext();
+
+                        SSLParameters sslparams = c.getDefaultSSLParameters();
+                        sslparams.setNeedClientAuth(false);
+                        sslparams.setWantClientAuth(false);
+
+                        params.setSSLParameters(sslparams);
+                    }
+                });
 
                 httpServer.createContext("/", exchange -> {
                     LOGGER.info("Handle path : {}", exchange.getRequestURI());
@@ -145,8 +167,10 @@ public class AzureStepDefs implements En {
                 azureKeyVaultServerHolder.set(httpServer);
                 httpServer.start();
 
+                final SSLContext clientSSLContext = clientSSLContext();
+
                 final HttpClient httpClient = HttpClient.newBuilder()
-                                                        .sslContext(sslContext)
+                                                        .sslContext(clientSSLContext)
                                                         .build();
 
                 final HttpRequest request = HttpRequest.newBuilder()
@@ -167,7 +191,6 @@ public class AzureStepDefs implements En {
                 final HttpResponse<String> response2 = httpClient.send(request2, HttpResponse.BodyHandlers.ofString());
                 assertThat(response2.statusCode()).isEqualTo(200);
                 assertThat(response2.body()).isEqualTo("SALUTATIONS");
-
 
             });
 
@@ -210,7 +233,7 @@ public class AzureStepDefs implements En {
                         azureKeyVaultUrl + "/auth", azureKeyVaultUrl);
 
                 final HttpClient httpClient = HttpClient.newBuilder()
-                    .sslContext(sslContext)
+//                    .sslContext(sslContext)
                     .build();
 
 
