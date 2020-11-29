@@ -19,9 +19,12 @@ dependencies {
     implementation "jakarta.annotation:jakarta.annotation-api"
 
     implementation project(":key-vault:key-vault-api")
-    implementation "com.azure:azure-security-keyvault-secrets:4.2.3"
+    implementation ("com.azure:azure-security-keyvault-secrets:4.2.3") {
+        exclude group: "io.netty", module: "netty-tcnative-boringssl-static"
+    }
     implementation ("com.azure:azure-identity:1.2.0") {
         exclude group: "com.sun.mail", module: "javax.mail"
+        exclude group: "io.netty", module: "netty-tcnative-boringssl-static"
     }
     implementation "net.java.dev.jna:jna:5.6.0" // TODO(cjh) also declared in root build.gradle - need to figure out how to set constraints
 
