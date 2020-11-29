@@ -3,10 +3,7 @@ package com.quorum.tessera.test.vault.azure;
 import com.quorum.tessera.config.Config;
 import com.quorum.tessera.config.util.JaxbUtil;
 import com.quorum.tessera.test.util.ElUtil;
-import com.sun.net.httpserver.HttpServer;
-import com.sun.net.httpserver.HttpsConfigurator;
-import com.sun.net.httpserver.HttpsParameters;
-import com.sun.net.httpserver.HttpsServer;
+import com.sun.net.httpserver.*;
 import config.PortUtil;
 import exec.ExecArgsBuilder;
 import exec.NodeExecManager;
@@ -39,16 +36,16 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Stream;
 
-import static com.quorum.tessera.config.util.EnvironmentVariables.AZURE_CLIENT_ID;
-import static com.quorum.tessera.config.util.EnvironmentVariables.AZURE_CLIENT_SECRET;
+import static com.quorum.tessera.config.util.EnvironmentVariables.*;
 import static org.assertj.core.api.Assertions.assertThat;
 
 public class AzureStepDefs implements En {
 
-    private final int azureKeyVaultPort = new PortUtil(8081).nextPort();
+    private final int azureKeyVaultPort = new PortUtil(10001).nextPort();
 
     private final String azureKeyVaultUrl = String.format("https://localhost:%d", azureKeyVaultPort);
 
@@ -223,31 +220,53 @@ public class AzureStepDefs implements En {
                 // authentication requests immediately instead of having to first make 401 GETs.
 
 //                final String respFormat = "{ \"value\": \"%s\" }";
-//
-//                final String authScenario = "AUTH";
-//                final String received401 = "RECEIVED_401";
-//
-//                final String authenticateHeader =
-//                    String.format(
-//                        "Bearer authorization=%s, resource=%s",
-//                        azureKeyVaultUrl + "/auth", azureKeyVaultUrl);
 
-                azureKeyVaultServerHolder.get().createContext(publicKeyUrl, exchange -> {
+                final String authenticateHeader = String.format("Bearer authorization=%s, resource=%s",azureKeyVaultUrl + "/auth", azureKeyVaultUrl);
 
-                    LOGGER.info("handle publicKeyUrl {}",publicKeyUrl);
+                final AtomicInteger getPublicKeyCount = new AtomicInteger(0);
 
-//                    {
-//                        "value": "mysecretvalue",
-//                        "id": "https://mockvault/secrets/mocksecretname/4387e9f3d6e14c459867679a90fd0f79",
-//                        "attributes": {
-//                            "enabled": true,
-//                            "created": 1493938410,
-//                            "updated": 1493938410,
-//                            "recoveryLevel": "Recoverable+Purgeable"
-//                        }
-//                    }
+                azureKeyVaultServerHolder.get().createContext(authUrl, exchange -> {
+
+                    LOGGER.info("handle authUrl {}", authUrl);
+
+                    final Headers requestHeaders = exchange.getRequestHeaders();
+                    final String clientRequestId = requestHeaders.get("client-request-id").get(0);
+                    LOGGER.info("client-request-id {}", clientRequestId);
 
                     JsonObject jsonObject = Json.createObjectBuilder()
+                        .add("access_token", "my-token")
+                        .add("token_type", "Bearer")
+                        .add("expires_in", "3600")
+                        .add("expires_on", "1388444763")
+                        .add("resource", "https://resource/")
+                        .add("refresh_token", "some-val")
+                        .add("scope", "some-val")
+                        .add("id_token", "some-val")
+                        .build();
+
+                    byte[] response = jsonObject.toString().getBytes();
+                    exchange.getResponseHeaders().add("Content-type", "application/json");
+                    exchange.getResponseHeaders().add("client-request-id", clientRequestId);
+                    exchange.sendResponseHeaders(200, 0);
+                    exchange.getResponseBody().write(response);
+
+                    LOGGER.info("response send  {}", new String(response));
+
+                    exchange.close();
+                });
+
+
+                azureKeyVaultServerHolder.get().createContext(publicKeyUrl, exchange -> {
+                    final int callCount = getPublicKeyCount.incrementAndGet();
+
+                    LOGGER.info("handle publicKeyUrl {}, call {}", publicKeyUrl, callCount);
+
+                    if (callCount == 1) {
+                        exchange.getResponseHeaders().add("WWW-Authenticate", authenticateHeader);
+                        exchange.sendResponseHeaders(401, 0);
+                        LOGGER.info("response send 401");
+                    } else {
+                        JsonObject jsonObject = Json.createObjectBuilder()
                             .add("value", publicKey)
                             .add("id", "https://mockvault/secrets/mocksecretname/4387e9f3d6e14c459867679a90fd0f79")
                             .add("attributes", Json.createObjectBuilder()
@@ -257,12 +276,13 @@ public class AzureStepDefs implements En {
                                 .add("recoveryLevel", "Recoverable+Purgeable"))
                             .build();
 
-                    byte[] response = jsonObject.toString().getBytes();
-                    exchange.getResponseHeaders().add("Content-type","application/json");
-                    exchange.sendResponseHeaders(200,0);
-                    exchange.getResponseBody().write(response);
+                        byte[] response = jsonObject.toString().getBytes();
+                        exchange.getResponseHeaders().add("Content-type", "application/json");
+                        exchange.sendResponseHeaders(200, 0);
+                        exchange.getResponseBody().write(response);
 
-                    LOGGER.info("response send  {}",new String(response));
+                        LOGGER.info("response send  {}", new String(response));
+                    }
 
                     exchange.close();
                 });
@@ -281,6 +301,52 @@ public class AzureStepDefs implements En {
                     LOGGER.info("response send  {}",new String(privateKeyResponse));
                     exchange.close();
                 });
+
+
+//                wireMockServer
+//                    .get()
+//                    .stubFor(
+//                        get(urlPathEqualTo(publicKeyUrl))
+//                            .inScenario(authScenario)
+//                            .whenScenarioStateIs(Scenario.STARTED)
+//                            .willSetStateTo(received401)
+//                            .willReturn(
+//                                unauthorized().withHeader("WWW-Authenticate", authenticateHeader)));
+//
+//                wireMockServer
+//                    .get()
+//                    .stubFor(
+//                        post(urlPathEqualTo(authUrl))
+//                            .willReturn(
+//                                okJson(
+//                                    "{ \"access_token\": \"my-token\", \"token_type\": \"Bearer\", \"expires_in\": \"3600\", \"expires_on\": \"1388444763\", \"resource\": \"https://resource/\", \"refresh_token\": \"some-val\", \"scope\": \"some-val\", \"id_token\": \"some-val\"}")
+//                                    .withHeader(
+//                                        "client-request-id",
+//                                        "{{request.headers.client-request-id}}")
+//                                    .withTransformers("response-template")));
+//
+//                wireMockServer
+//                    .get()
+//                    .stubFor(
+//                        get(urlPathEqualTo(publicKeyUrl))
+//                            .inScenario(authScenario)
+//                            .whenScenarioStateIs(received401)
+//                            .willReturn(okJson(String.format(respFormat, publicKey))));
+//
+//                wireMockServer
+//                    .get()
+//                    .stubFor(
+//                        get(urlPathEqualTo(privateKeyUrl))
+//                            .willReturn(okJson(String.format(respFormat, privateKey))));
+//            });
+
+
+//                int sleep = 5*60;
+//                LOGGER.info("sleeping for {}secs", sleep);
+//                for (int i = sleep; i > 0; i--) {
+//                    LOGGER.info("{}", i);
+//                    Thread.sleep(1000);
+//                }
 
             });
 
@@ -328,10 +394,6 @@ public class AzureStepDefs implements En {
         Then(
             "^Tessera will retrieve the key pair from AKV$",
             () -> {
-//                wireMockServer.get().verify(2, postRequestedFor(urlEqualTo(authUrl)));
-//                wireMockServer.get().verify(3, getRequestedFor(urlPathEqualTo(publicKeyUrl)));
-//                wireMockServer.get().verify(2, getRequestedFor(urlPathEqualTo(privateKeyUrl)));
-
                 final HttpClient httpClient = HttpClient.newBuilder().build();
 
                 final HttpRequest request = HttpRequest.newBuilder()
@@ -467,6 +529,7 @@ public class AzureStepDefs implements En {
         Map<String, String> tesseraEnvironment = tesseraProcessBuilder.environment();
         tesseraEnvironment.put(AZURE_CLIENT_ID, "my-client-id");
         tesseraEnvironment.put(AZURE_CLIENT_SECRET, "my-client-secret");
+        tesseraEnvironment.put(AZURE_TENANT_ID, "my-tenant-id");
         tesseraEnvironment.put("JAVA_OPTS", jvmArgsStr); // JAVA_OPTS is read by start script and is used to provide jvm args
 
         try {
@@ -544,37 +607,6 @@ public class AzureStepDefs implements En {
             });
 
         startUpLatch.await(30, TimeUnit.SECONDS);
-    }
-
-    static class MySSLParameters extends HttpsParameters {
-
-        public MySSLParameters() {
-        }
-
-        @Override
-        public HttpsConfigurator getHttpsConfigurator() {
-            return null;
-        }
-
-        @Override
-        public InetSocketAddress getClientAddress() {
-            return null;
-        }
-
-        @Override
-        public void setSSLParameters(SSLParameters params) {
-
-        }
-
-        @Override
-        public boolean getWantClientAuth() {
-            return false;
-        }
-
-        @Override
-        public boolean getNeedClientAuth() {
-            return false;
-        }
     }
 
 }

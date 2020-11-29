@@ -8,6 +8,7 @@ import com.quorum.tessera.config.KeyVaultType;
 import com.quorum.tessera.config.util.EnvironmentVariableProvider;
 import com.quorum.tessera.key.vault.KeyVaultService;
 import com.quorum.tessera.key.vault.KeyVaultServiceFactory;
+import reactor.core.publisher.Hooks;
 
 import java.util.Objects;
 import java.util.Optional;
@@ -17,6 +18,8 @@ public class AzureKeyVaultServiceFactory implements KeyVaultServiceFactory {
     @Override
     public KeyVaultService create(Config config, EnvironmentVariableProvider envProvider) {
         Objects.requireNonNull(config);
+
+        Hooks.onOperatorDebug(); //TODO(cjh) for debugging only - remember to remove
 
         final KeyVaultConfig keyVaultConfig = Optional.ofNullable(config.getKeys())
             .flatMap(k -> k.getKeyVaultConfig(KeyVaultType.AZURE))
