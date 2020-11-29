@@ -154,6 +154,9 @@ public class AzureStepDefs implements En {
                     }
                 });
 
+                azureKeyVaultServerHolder.set(httpServer);
+                httpServer.start();
+
                 httpServer.createContext("/", exchange -> {
                     LOGGER.info("Handle path : {}", exchange.getRequestURI());
 
@@ -164,33 +167,30 @@ public class AzureStepDefs implements En {
                     exchange.close();
                 });
 
-                azureKeyVaultServerHolder.set(httpServer);
-                httpServer.start();
-
-                final SSLContext clientSSLContext = clientSSLContext();
-
-                final HttpClient httpClient = HttpClient.newBuilder()
-                                                        .sslContext(clientSSLContext)
-                                                        .build();
-
-                final HttpRequest request = HttpRequest.newBuilder()
-                                                        .uri(URI.create(azureKeyVaultUrl))
-                                                        .GET()
-                                                        .build();
-
-                final HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-
-                assertThat(response.statusCode()).isEqualTo(200);
-                assertThat(response.body()).isEqualTo("SALUTATIONS");
-
-                final HttpRequest request2 =  HttpRequest.newBuilder()
-                    .uri(URI.create(azureKeyVaultUrl +"/foo"))
-                    .GET()
-                    .build();
-
-                final HttpResponse<String> response2 = httpClient.send(request2, HttpResponse.BodyHandlers.ofString());
-                assertThat(response2.statusCode()).isEqualTo(200);
-                assertThat(response2.body()).isEqualTo("SALUTATIONS");
+//                final SSLContext clientSSLContext = clientSSLContext();
+//
+//                final HttpClient httpClient = HttpClient.newBuilder()
+//                                                        .sslContext(clientSSLContext)
+//                                                        .build();
+//
+//                final HttpRequest request = HttpRequest.newBuilder()
+//                                                        .uri(URI.create(azureKeyVaultUrl))
+//                                                        .GET()
+//                                                        .build();
+//
+//                final HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+//
+//                assertThat(response.statusCode()).isEqualTo(200);
+//                assertThat(response.body()).isEqualTo("SALUTATIONS");
+//
+//                final HttpRequest request2 =  HttpRequest.newBuilder()
+//                    .uri(URI.create(azureKeyVaultUrl +"/foo"))
+//                    .GET()
+//                    .build();
+//
+//                final HttpResponse<String> response2 = httpClient.send(request2, HttpResponse.BodyHandlers.ofString());
+//                assertThat(response2.statusCode()).isEqualTo(200);
+//                assertThat(response2.body()).isEqualTo("SALUTATIONS");
 
             });
 
@@ -222,26 +222,39 @@ public class AzureStepDefs implements En {
                 // The WWW-Authenticate header is used in subsequent GETs to the same Azure resource to make
                 // authentication requests immediately instead of having to first make 401 GETs.
 
-                final String respFormat = "{ \"value\": \"%s\" }";
-
-                final String authScenario = "AUTH";
-                final String received401 = "RECEIVED_401";
-
-                final String authenticateHeader =
-                    String.format(
-                        "Bearer authorization=%s, resource=%s",
-                        azureKeyVaultUrl + "/auth", azureKeyVaultUrl);
-
-                final HttpClient httpClient = HttpClient.newBuilder()
-//                    .sslContext(sslContext)
-                    .build();
-
+//                final String respFormat = "{ \"value\": \"%s\" }";
+//
+//                final String authScenario = "AUTH";
+//                final String received401 = "RECEIVED_401";
+//
+//                final String authenticateHeader =
+//                    String.format(
+//                        "Bearer authorization=%s, resource=%s",
+//                        azureKeyVaultUrl + "/auth", azureKeyVaultUrl);
 
                 azureKeyVaultServerHolder.get().createContext(publicKeyUrl, exchange -> {
 
                     LOGGER.info("handle publicKeyUrl {}",publicKeyUrl);
+
+//                    {
+//                        "value": "mysecretvalue",
+//                        "id": "https://mockvault/secrets/mocksecretname/4387e9f3d6e14c459867679a90fd0f79",
+//                        "attributes": {
+//                            "enabled": true,
+//                            "created": 1493938410,
+//                            "updated": 1493938410,
+//                            "recoveryLevel": "Recoverable+Purgeable"
+//                        }
+//                    }
+
                     JsonObject jsonObject = Json.createObjectBuilder()
-                            .add("value",publicKey)
+                            .add("value", publicKey)
+                            .add("id", "https://mockvault/secrets/mocksecretname/4387e9f3d6e14c459867679a90fd0f79")
+                            .add("attributes", Json.createObjectBuilder()
+                                .add("enabled", true)
+                                .add("created", 1493938410)
+                                .add("updated", 1493938410)
+                                .add("recoveryLevel", "Recoverable+Purgeable"))
                             .build();
 
                     byte[] response = jsonObject.toString().getBytes();
@@ -258,7 +271,7 @@ public class AzureStepDefs implements En {
                     LOGGER.info("handle privateKeyUrl {}",privateKeyUrl);
 
                     byte[] privateKeyResponse = Json.createObjectBuilder()
-                        .add("value",privateKey)
+                        .add("value", privateKey)
                         .build().toString()
                         .getBytes();
 
@@ -269,77 +282,6 @@ public class AzureStepDefs implements En {
                     exchange.close();
                 });
 
-
-//                azureKeyVaultServerHolder.get().createContext(authUrl).setAuthenticator(new Authenticator() {
-//                    @Override
-//                    public Result authenticate(HttpExchange exchange) {
-//                        LOGGER.info("authenticate ");
-//                        final String response = Json.createObjectBuilder()
-//                            .add("access_token", "my-token")
-//                            .add("token_type", "Bearer")
-//                            .add("expires_in", "3600")
-//                            .add("expires_on", "1388444763")
-//                            .add("resource", "https://resource/")
-//                            .add("refresh_token", "some-val")
-//                            .add("id_token", "some-val")
-//                            .build()
-//                            .toString();
-//
-//                        LOGGER.info("responseData {} ", response);
-//
-//                        byte[] responseData = response.getBytes();
-//                        return IOCallback.execute(() -> {
-//
-//                            exchange.sendResponseHeaders(HttpURLConnection.HTTP_OK, responseData.length);
-//
-//                            exchange.getRequestHeaders().add("client-request-id", "{{request.headers.client-request-id}}");
-//                            exchange.getResponseBody().write(responseData);
-//                            exchange.close();
-//
-//                            HttpPrincipal httpPrincipal = new HttpPrincipal("skinner", "/");
-//
-//                            return new Success(httpPrincipal);
-//                        });
-//
-//                    }
-//                });
-
-//
-//                wireMockServer
-//                    .get()
-//                    .stubFor(
-//                        get(urlPathEqualTo(publicKeyUrl))
-//                            .inScenario(authScenario)
-//                            .whenScenarioStateIs(Scenario.STARTED)
-//                            .willSetStateTo(received401)
-//                            .willReturn(
-//                                unauthorized().withHeader("WWW-Authenticate", authenticateHeader)));
-//
-//                wireMockServer
-//                    .get()
-//                    .stubFor(
-//                        post(urlPathEqualTo(authUrl))
-//                            .willReturn(
-//                                okJson(
-//                                    "{ \"access_token\": \"my-token\", \"token_type\": \"Bearer\", \"expires_in\": \"3600\", \"expires_on\": \"1388444763\", \"resource\": \"https://resource/\", \"refresh_token\": \"some-val\", \"scope\": \"some-val\", \"id_token\": \"some-val\"}")
-//                                    .withHeader(
-//                                        "client-request-id",
-//                                        "{{request.headers.client-request-id}}")
-//                                    .withTransformers("response-template")));
-//
-//                wireMockServer
-//                    .get()
-//                    .stubFor(
-//                        get(urlPathEqualTo(publicKeyUrl))
-//                            .inScenario(authScenario)
-//                            .whenScenarioStateIs(received401)
-//                            .willReturn(okJson(String.format(respFormat, publicKey))));
-//
-//                wireMockServer
-//                    .get()
-//                    .stubFor(
-//                        get(urlPathEqualTo(privateKeyUrl))
-//                            .willReturn(okJson(String.format(respFormat, privateKey))));
             });
 
         When(
@@ -377,7 +319,6 @@ public class AzureStepDefs implements En {
                 final List<String> jvmArgs = new ArrayList<>();
                 jvmArgs.add("-Djavax.net.ssl.trustStore=" + truststore.getFile());
                 jvmArgs.add("-Djavax.net.ssl.trustStorePassword=testtest");
-                jvmArgs.add("-Dspring.profiles.active=disable-unixsocket");
                 jvmArgs.add("-Dlogback.configurationFile=" + logbackConfigFile.getFile());
                 jvmArgs.add("-Ddebug=true");
 
@@ -391,16 +332,19 @@ public class AzureStepDefs implements En {
 //                wireMockServer.get().verify(3, getRequestedFor(urlPathEqualTo(publicKeyUrl)));
 //                wireMockServer.get().verify(2, getRequestedFor(urlPathEqualTo(privateKeyUrl)));
 
-                final URL partyInfoUrl =
-                    UriBuilder.fromUri("http://localhost").port(8080).path("partyinfo").build().toURL();
+                final HttpClient httpClient = HttpClient.newBuilder().build();
 
-                HttpURLConnection partyInfoUrlConnection = (HttpURLConnection) partyInfoUrl.openConnection();
-                partyInfoUrlConnection.connect();
+                final HttpRequest request = HttpRequest.newBuilder()
+                                                        .uri(URI.create("http://localhost:8080").resolve("partyinfo"))
+                                                        .GET()
+                                                        .build();
 
-                int partyInfoResponseCode = partyInfoUrlConnection.getResponseCode();
-                assertThat(partyInfoResponseCode).isEqualTo(HttpURLConnection.HTTP_OK);
+                final HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-                JsonReader jsonReader = Json.createReader(partyInfoUrlConnection.getInputStream());
+                assertThat(response.statusCode()).isEqualTo(200);
+//                assertThat(response.body()).isEqualTo("SALUTATIONS");
+
+                JsonReader jsonReader = Json.createReader(new ByteArrayInputStream(response.body().getBytes()));
 
                 JsonObject partyInfoObject = jsonReader.readObject();
 
