@@ -85,7 +85,6 @@ allprojects {
                 implementation "org.glassfish.jersey.core:jersey-common:$jerseyVersion"
                 implementation "org.glassfish.jersey.core:jersey-client:$jerseyVersion"
 
-                implementation "org.eclipse.jetty:jetty-unixsocket:$jettyVersion"
                 implementation "org.eclipse.jetty:jetty-client:$jettyVersion"
                 implementation "org.eclipse.jetty:jetty-servlet:$jettyVersion"
                 implementation "org.eclipse.jetty:jetty-unixsocket:$jettyVersion"
@@ -137,8 +136,7 @@ allprojects {
                 api "jakarta.validation:jakarta.validation-api:2.0.2"
                 implementation "org.hibernate.validator:hibernate-validator:6.1.6.Final"
 
-                implementation "net.java.dev.jna:jna:5.4.0"
-
+                implementation("net.java.dev.jna:jna:5.6.0") // TODO(cjh) constraint is not being applied to :key-vault:azure-key-vault, so this works for now but will cause problems if azure dependencies update transitive
 
             }
         }
