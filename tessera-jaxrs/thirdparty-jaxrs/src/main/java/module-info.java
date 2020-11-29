@@ -14,6 +14,6 @@ module tessera.tessera.jaxrs.thirdparty.jaxrs.main {
     provides com.quorum.tessera.config.apps.TesseraApp with
         com.quorum.tessera.thirdparty.ThirdPartyRestApp;
 
-    exports com.quorum.tessera.thirdparty to hk2.locator;
+    exports com.quorum.tessera.thirdparty;
 
 }

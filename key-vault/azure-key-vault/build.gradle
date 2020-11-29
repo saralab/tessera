@@ -12,7 +12,6 @@ dependencyCheck {
 
 configurations.all {
     exclude group: 'stax'
-
 }
 
 dependencies {

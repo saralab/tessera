@@ -5,7 +5,11 @@ plugins {
 dependencies {
     implementation "jakarta.ws.rs:jakarta.ws.rs-api"
     implementation "jakarta.xml.bind:jakarta.xml.bind-api"
-    implementation "org.eclipse.jetty:jetty-unixsocket"
+    implementation ("org.eclipse.jetty:jetty-unixsocket") {
+        exclude group: "com.github.jnr", module: "jffi"
+    }
+    implementation files("/Users/chris/.m2/repository/com/github/jnr/jffi/1.3.1-SNAPSHOT/jffi-1.3.1-SNAPSHOT-complete.jar")
+    implementation files("/Users/chris/.m2/repository/com/github/jnr/jffi/1.3.1-SNAPSHOT/jffi-1.3.1-SNAPSHOT-native.jar")
     implementation "org.glassfish.jersey.core:jersey-client"
     implementation "org.eclipse.jetty:jetty-client"
     runtimeOnly project(":shared")
