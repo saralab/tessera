@@ -14,10 +14,7 @@ import org.slf4j.LoggerFactory;
 import javax.json.Json;
 import javax.json.JsonObject;
 import javax.json.JsonReader;
-import javax.net.ssl.KeyManagerFactory;
-import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLParameters;
-import javax.net.ssl.TrustManagerFactory;
+import javax.net.ssl.*;
 import javax.ws.rs.core.UriBuilder;
 import java.io.*;
 import java.net.HttpURLConnection;
@@ -115,6 +112,41 @@ public class AzureStepDefs implements En {
         return sslContext;
     }
 
+    SSLContext sslContext() throws Exception {
+        final Path keyStoreFile = Paths.get(getClass().getResource("/certificates/server-localhost-with-san.jks").toURI());
+        final char[] jksPassword = "testtest".toCharArray();
+
+        final SSLContext sslContext = SSLContext.getInstance("TLS");
+
+        final KeyStore keyStore = KeyStore.getInstance("JKS");
+
+        try (InputStream in = Files.newInputStream(keyStoreFile)) {
+            keyStore.load(in, jksPassword);
+        }
+
+        final KeyManagerFactory keyManagerFactory = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+
+        keyManagerFactory.init(keyStore, jksPassword);
+
+        final Path trustStoreFile = Paths.get(getClass().getResource("/certificates/truststore.jks").toURI());
+
+        final KeyStore trustStore = KeyStore.getInstance("JKS");
+
+        try (InputStream in = Files.newInputStream(trustStoreFile)) {
+            trustStore.load(in, jksPassword);
+        }
+
+        final TrustManagerFactory trustManagerFactory = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+
+        trustManagerFactory.init(trustStore);
+
+        LOGGER.info("{} keymanager(s), {} trustmanager(s)", keyManagerFactory.getKeyManagers().length, trustManagerFactory.getTrustManagers().length);
+
+        sslContext.init(keyManagerFactory.getKeyManagers(), trustManagerFactory.getTrustManagers(), null);
+
+        return sslContext;
+    }
+
     public AzureStepDefs() throws Exception {
         After(
             () -> {
@@ -134,12 +166,10 @@ public class AzureStepDefs implements En {
                 final InetSocketAddress inetAddress = new InetSocketAddress(azureKeyVaultPort);
                 final HttpsServer httpServer = HttpsServer.create(inetAddress, 0);
 
-                final SSLContext serverSSLContext = serverSSLContext();
+                final SSLContext serverSSLContext = sslContext();
+//                final SSLContext serverSSLContext = serverSSLContext();
 
-                final HttpsConfigurator httpsConfigurator = new HttpsConfigurator(serverSSLContext);
-                httpServer.setHttpsConfigurator(httpsConfigurator);
-
-                httpServer.setHttpsConfigurator (new HttpsConfigurator(serverSSLContext) {
+                httpServer.setHttpsConfigurator(new HttpsConfigurator(serverSSLContext) {
                     public void configure (HttpsParameters params) {
                         SSLContext c = getSSLContext();
 
@@ -163,31 +193,6 @@ public class AzureStepDefs implements En {
                     exchange.getResponseBody().write(greeting);
                     exchange.close();
                 });
-
-//                final SSLContext clientSSLContext = clientSSLContext();
-//
-//                final HttpClient httpClient = HttpClient.newBuilder()
-//                                                        .sslContext(clientSSLContext)
-//                                                        .build();
-//
-//                final HttpRequest request = HttpRequest.newBuilder()
-//                                                        .uri(URI.create(azureKeyVaultUrl))
-//                                                        .GET()
-//                                                        .build();
-//
-//                final HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-//
-//                assertThat(response.statusCode()).isEqualTo(200);
-//                assertThat(response.body()).isEqualTo("SALUTATIONS");
-//
-//                final HttpRequest request2 =  HttpRequest.newBuilder()
-//                    .uri(URI.create(azureKeyVaultUrl +"/foo"))
-//                    .GET()
-//                    .build();
-//
-//                final HttpResponse<String> response2 = httpClient.send(request2, HttpResponse.BodyHandlers.ofString());
-//                assertThat(response2.statusCode()).isEqualTo(200);
-//                assertThat(response2.body()).isEqualTo("SALUTATIONS");
 
             });
 
@@ -301,52 +306,6 @@ public class AzureStepDefs implements En {
                     LOGGER.info("response send  {}",new String(privateKeyResponse));
                     exchange.close();
                 });
-
-
-//                wireMockServer
-//                    .get()
-//                    .stubFor(
-//                        get(urlPathEqualTo(publicKeyUrl))
-//                            .inScenario(authScenario)
-//                            .whenScenarioStateIs(Scenario.STARTED)
-//                            .willSetStateTo(received401)
-//                            .willReturn(
-//                                unauthorized().withHeader("WWW-Authenticate", authenticateHeader)));
-//
-//                wireMockServer
-//                    .get()
-//                    .stubFor(
-//                        post(urlPathEqualTo(authUrl))
-//                            .willReturn(
-//                                okJson(
-//                                    "{ \"access_token\": \"my-token\", \"token_type\": \"Bearer\", \"expires_in\": \"3600\", \"expires_on\": \"1388444763\", \"resource\": \"https://resource/\", \"refresh_token\": \"some-val\", \"scope\": \"some-val\", \"id_token\": \"some-val\"}")
-//                                    .withHeader(
-//                                        "client-request-id",
-//                                        "{{request.headers.client-request-id}}")
-//                                    .withTransformers("response-template")));
-//
-//                wireMockServer
-//                    .get()
-//                    .stubFor(
-//                        get(urlPathEqualTo(publicKeyUrl))
-//                            .inScenario(authScenario)
-//                            .whenScenarioStateIs(received401)
-//                            .willReturn(okJson(String.format(respFormat, publicKey))));
-//
-//                wireMockServer
-//                    .get()
-//                    .stubFor(
-//                        get(urlPathEqualTo(privateKeyUrl))
-//                            .willReturn(okJson(String.format(respFormat, privateKey))));
-//            });
-
-
-//                int sleep = 5*60;
-//                LOGGER.info("sleeping for {}secs", sleep);
-//                for (int i = sleep; i > 0; i--) {
-//                    LOGGER.info("{}", i);
-//                    Thread.sleep(1000);
-//                }
 
             });
 
